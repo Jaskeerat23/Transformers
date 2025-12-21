@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
 class Encoder(nn.Module):
     
-    def __init__(self, num_heads, seq_len, d_model, d_ff, device, mask = None, post_norm = True):
+    def __init__(self, num_heads, d_model, d_ff, device, mask = None, post_norm = True):
         super().__init__()
         self.post_norm = post_norm
         self.num_heads = num_heads
@@ -20,20 +20,20 @@ class Encoder(nn.Module):
         self.relu = nn.ReLU()
         
         #Layer Norm layers
-        self.layer_norm1 = nn.LayerNorm([seq_len, d_model])
-        self.layer_norm2 = nn.LayerNorm([seq_len, d_model])
+        self.layer_norm1 = nn.LayerNorm(d_model)
+        self.layer_norm2 = nn.LayerNorm(d_model)
         
         #Multi Head Attention Part
         self.multi_head_attention = Attention.MultiHeadAttention(device = device, mask = mask)
         
         #The below projection layers are used to transform X to Q, K, V respectively
-        self.w_q_enc = nn.Linear(in_features = 512, out_features = 512)
-        self.w_k_enc = nn.Linear(in_features = 512, out_features = 512)
-        self.w_v_enc = nn.Linear(in_features = 512, out_features = 512)
+        self.w_q_enc = nn.Linear(in_features = d_model, out_features = d_model)
+        self.w_k_enc = nn.Linear(in_features = d_model, out_features = d_model)
+        self.w_v_enc = nn.Linear(in_features = d_model, out_features = d_model)
         
         #DropOut
-        self.dropout_1 = nn.Dropout(p = 0.3)
-        self.dropout_2 = nn.Dropout(p = 0.3)
+        self.dropout_1 = nn.Dropout(p = 0.1)
+        self.dropout_2 = nn.Dropout(p = 0.1)
     
     def forward(self, X):
         
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     
     X = torch.randn(32, 20, 512).to(device)
     
-    encoder_block = Encoder(8, 20, 512, 2048, device).to(device)
+    encoder_block = Encoder(8, 512, 2048, device).to(device)
     
     enc_out = encoder_block(X)
     

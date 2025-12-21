@@ -30,6 +30,10 @@ class Encoder(nn.Module):
         self.w_q_enc = nn.Linear(in_features = 512, out_features = 512)
         self.w_k_enc = nn.Linear(in_features = 512, out_features = 512)
         self.w_v_enc = nn.Linear(in_features = 512, out_features = 512)
+        
+        #DropOut
+        self.dropout_1 = nn.Dropout(p = 0.3)
+        self.dropout_2 = nn.Dropout(p = 0.3)
     
     def forward(self, X):
         
@@ -54,11 +58,11 @@ class Encoder(nn.Module):
         
         multi_attn_out = self.multi_head_attention(Q, K, V)
         
-        sub_layer_1 = self.layer_norm1(X + multi_attn_out)
+        sub_layer_1 = self.layer_norm1(X + self.dropout_1(multi_attn_out))
         
         ffn_out = self.ffl2(self.relu(self.ffl1(sub_layer_1)))
         
-        enc_out = self.layer_norm2(sub_layer_1 + ffn_out)
+        enc_out = self.layer_norm2(sub_layer_1 + self.dropout_2(ffn_out))
         
         return enc_out
 

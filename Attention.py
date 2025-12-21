@@ -36,7 +36,7 @@ class ScaleDotProductAttention(nn.Module):
             print(f"The dimension of K is {K.shape}")
             print(f"The dimension of V is {V.shape}")
             
-            print(f"The dimension of K.T is {torch.transpose(K, 1, 2).shape}")
+            print(f"The dimension of K.T is {torch.transpose(K, -1, -2).shape}")
         
         K = torch.transpose(K, -1, -2)
         similarity_q_k = torch.matmul(Q, K)
@@ -53,23 +53,37 @@ class ScaleDotProductAttention(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     
-    def __init__(self, device, mask = None):
+    def __init__(self, d_model, num_heads, device, mask = None):
         super().__init__()
         self.scaled_dot_attention = ScaleDotProductAttention(device = device)
-        self.linear_layer = nn.Linear(in_features = 512, out_features = 512, device = device, bias = False)
+        self.linear_layer = nn.Linear(in_features = d_model, out_features = d_model, device = device, bias = False)
         self.mask = mask
+        self.num_heads = num_heads
+        self.d_model = d_model
+        
+        #According to paper
+        self.d_k = self.d_v = d_model//num_heads
     
     def forward(self, Q, K, V):
         
-        B, _, seq_len, _ = Q.shape
+        B, seq_len_q, _ = Q.shape
+        _, seq_len, _ = K.shape
+        
+        Q = torch.reshape(Q, shape = (B, seq_len_q, self.num_heads, self.d_k))
+        K = torch.reshape(K, shape = (B, seq_len, self.num_heads, self.d_k))
+        V = torch.reshape(V, shape = (B, seq_len, self.num_heads, self.d_v))
+        
+        Q = torch.transpose(Q, dim0 = 2, dim1 = 1)
+        K = torch.transpose(K, dim0 = 2, dim1 = 1)
+        V = torch.transpose(V, dim0 = 2, dim1 = 1)
         
         if __name__ == "__main__":
             
             print(f"Batch size is {B}")
             print(f"Sequence length is {seq_len}")
         
-        assert Q.shape[1] == num_heads and K.shape[1] == num_heads and V.shape[1] == num_heads, print(f"Num Heads are not equal to {num_heads}")
-        assert num_heads * d_k == d_model, print(f"Shape mismatch")
+        assert Q.shape[1] == self.num_heads and K.shape[1] == self.num_heads and V.shape[1] == self.num_heads, print(f"Num Heads are not equal to {num_heads}")
+        assert self.num_heads * self.d_k == self.d_model, print(f"Shape mismatch")
         
         scaled_attn_out = self.scaled_dot_attention(Q, K, V, self.mask)
         scaled_attn_out_transposed = torch.transpose(scaled_attn_out, 1, 2)
@@ -77,18 +91,18 @@ class MultiHeadAttention(nn.Module):
         if __name__ == "__main__":
             print(f"The shape of scaled dot product attention weights after transposing is {scaled_attn_out_transposed.shape}")
         
-        attn_out = torch.reshape(scaled_attn_out_transposed, shape = (B, seq_len, num_heads * d_k))
+        attn_out = torch.reshape(scaled_attn_out_transposed, shape = (B, seq_len_q, self.num_heads * self.d_k))
 
         return self.linear_layer(attn_out)
 
 if __name__ == "__main__":
     
-    q = torch.randn(32, num_heads, 20, d_k).to(device)
-    k = torch.randn(32, num_heads, 20, d_k).to(device)
-    v = torch.randn(32, num_heads, 20, d_v).to(device)
+    q = torch.randn(32, 30, d_model).to(device)
+    k = torch.randn(32, 20, d_model).to(device)
+    v = torch.randn(32, 20, d_model).to(device)
     
     scaled_dot_attn = ScaleDotProductAttention(device)
-    multi_head_attn = MultiHeadAttention(device)
+    multi_head_attn = MultiHeadAttention(d_model = 512, num_heads = 8, device = device)
     
     scaled_dot_attn_ans = scaled_dot_attn(q, k, v)
     multi_head_attn_ans = multi_head_attn(q, k, v)

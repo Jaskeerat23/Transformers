@@ -5,8 +5,9 @@ import Attention
 
 class Encoder(nn.Module):
     
-    def __init__(self, seq_len, d_model, d_ff, device, mask = None):
+    def __init__(self, seq_len, d_model, d_ff, device, mask = None, post_norm = True):
         super().__init__()
+        self.post_norm = post_norm
         
         #Feed forward Network
         self.ffl1 = nn.Linear(in_features = d_model, out_features = d_ff)
@@ -26,4 +27,17 @@ class Encoder(nn.Module):
         self.w_v_enc = nn.Linear(in_features = 512, out_features = 512)
     
     def forward(self, X):
-        pass
+        
+        Q = self.w_q_enc(X)
+        K = self.w_k_enc(X)
+        V = self.w_v_enc(X)
+        
+        multi_attn_out = self.multi_head_attention(Q, K, V)
+        
+        sub_layer_1 = self.layer_norm1(X + multi_attn_out)
+        
+        ffn_out = self.ffl1(self.relu(self.ffl2(sub_layer_1)))
+        
+        enc_out = self.layer_norm2(sub_layer_1 + ffn_out)
+        
+        return enc_out

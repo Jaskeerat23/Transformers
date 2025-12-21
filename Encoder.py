@@ -24,7 +24,7 @@ class Encoder(nn.Module):
         self.layer_norm2 = nn.LayerNorm(d_model)
         
         #Multi Head Attention Part
-        self.multi_head_attention = Attention.MultiHeadAttention(device = device, mask = mask)
+        self.self_attn = Attention.MultiHeadAttention(d_model = d_model, num_heads = self.num_heads, device = device, mask = mask)
         
         #The below projection layers are used to transform X to Q, K, V respectively
         self.w_q_enc = nn.Linear(in_features = d_model, out_features = d_model)
@@ -37,26 +37,16 @@ class Encoder(nn.Module):
     
     def forward(self, X):
         
-        B, seq_len, d_model = X.shape
-        
         Q = self.w_q_enc(X)
         K = self.w_k_enc(X)
         V = self.w_v_enc(X)
-        
-        Q = torch.reshape(Q, shape = (B, seq_len, self.num_heads, d_model//self.num_heads))
-        K = torch.reshape(K, shape = (B, seq_len, self.num_heads, d_model//self.num_heads))
-        V = torch.reshape(V, shape = (B, seq_len, self.num_heads, d_model//self.num_heads))
-        
-        Q = torch.transpose(Q, dim0 = 2, dim1 = 1)
-        K = torch.transpose(K, dim0 = 2, dim1 = 1)
-        V = torch.transpose(V, dim0 = 2, dim1 = 1)
         
         if __name__ == "__main__":
             print(f"The shape of Q after dividing heads is {Q.shape}")
             print(f"The shape of K after dividing heads is {K.shape}")
             print(f"The shape of V after dividing heads is {V.shape}")
         
-        multi_attn_out = self.multi_head_attention(Q, K, V)
+        multi_attn_out = self.self_attn(Q, K, V)
         
         sub_layer_1 = self.layer_norm1(X + self.dropout_1(multi_attn_out))
         

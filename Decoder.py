@@ -9,7 +9,7 @@ if __name__ == "__main__":
 
 class Decoder(nn.Module):
     
-    def __init__(self, num_heads, d_model, d_ff, device, mask = None, post_norm = True):
+    def __init__(self, num_heads, d_model, d_ff, device, post_norm = True):
         super().__init__()
         self.post_norm = post_norm
         
@@ -24,8 +24,8 @@ class Decoder(nn.Module):
         self.layer_norm3 = nn.LayerNorm(d_model)
         
         #Attention Heads
-        self.cross_attn = Attention.MultiHeadAttention(d_model = d_model, num_heads = num_heads, device = device, mask = mask)
-        self.self_attn = Attention.MultiHeadAttention(d_model = d_model, num_heads = num_heads, device = device, mask = mask)
+        self.cross_attn = Attention.MultiHeadAttention(d_model = d_model, num_heads = num_heads, device = device)
+        self.self_attn = Attention.MultiHeadAttention(d_model = d_model, num_heads = num_heads, device = device)
         
         #Wq, Wk, Wv for first sub-layer of decoder
         self.w_q_dec = nn.Linear(in_features = d_model, out_features = d_model)
@@ -44,13 +44,13 @@ class Decoder(nn.Module):
     
     #Y represents output embeddings since during training we perform teacher forcing
     #according to the original paper
-    def forward(self, Y, enc_out):
+    def forward(self, Y, enc_out, mask = None):
         
         Q = self.w_q_dec(Y)
         K = self.w_k_dec(Y)
         V = self.w_v_dec(Y)
         
-        self_attn_out = self.self_attn(Q, K, V)
+        self_attn_out = self.self_attn(Q, K, V, mask)
         
         sub_layer1_out = self.layer_norm1(Y + self.dropout_self_attn(self_attn_out))
         
@@ -58,7 +58,7 @@ class Decoder(nn.Module):
         K_enc = self.w_k_enc(enc_out)
         V_enc = self.w_v_enc(enc_out)
         
-        cross_attn_out = self.cross_attn(Q_dec, K_enc, V_enc)
+        cross_attn_out = self.cross_attn(Q_dec, K_enc, V_enc, mask)
         
         sub_layer2_out = self.layer_norm2(sub_layer1_out + self.dropout_cross_attn(cross_attn_out))
         

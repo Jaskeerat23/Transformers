@@ -53,18 +53,17 @@ class ScaleDotProductAttention(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     
-    def __init__(self, d_model, num_heads, device, mask = None):
+    def __init__(self, d_model, num_heads, device):
         super().__init__()
         self.scaled_dot_attention = ScaleDotProductAttention(device = device)
         self.linear_layer = nn.Linear(in_features = d_model, out_features = d_model, device = device, bias = False)
-        self.mask = mask
         self.num_heads = num_heads
         self.d_model = d_model
         
         #According to paper
         self.d_k = self.d_v = d_model//num_heads
     
-    def forward(self, Q, K, V):
+    def forward(self, Q, K, V, mask = None):
         
         B, seq_len_q, _ = Q.shape
         _, seq_len, _ = K.shape
@@ -82,10 +81,10 @@ class MultiHeadAttention(nn.Module):
             print(f"Batch size is {B}")
             print(f"Sequence length is {seq_len}")
         
-        assert Q.shape[1] == self.num_heads and K.shape[1] == self.num_heads and V.shape[1] == self.num_heads, print(f"Num Heads are not equal to {num_heads}")
-        assert self.num_heads * self.d_k == self.d_model, print(f"Shape mismatch")
+        assert Q.shape[1] == self.num_heads and K.shape[1] == self.num_heads and V.shape[1] == self.num_heads, f"Num Heads are not equal to {num_heads}"
+        assert self.num_heads * self.d_k == self.d_model, f"Shape mismatch"
         
-        scaled_attn_out = self.scaled_dot_attention(Q, K, V, self.mask)
+        scaled_attn_out = self.scaled_dot_attention(Q, K, V, mask)
         scaled_attn_out_transposed = torch.transpose(scaled_attn_out, 1, 2)
         
         if __name__ == "__main__":

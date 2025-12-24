@@ -40,7 +40,7 @@ class ScaleDotProductAttention(nn.Module):
         
         K = torch.transpose(K, -1, -2)
         similarity_q_k = torch.matmul(Q, K)
-        scaled_similarity = (similarity_q_k/math.sqrt(d_k))
+        scaled_similarity = (similarity_q_k/math.sqrt(Q.shape[-1]))
         
         if mask is not None:
             scaled_similarity+=mask

@@ -44,28 +44,32 @@ class Decoder(nn.Module):
     
     #Y represents output embeddings since during training we perform teacher forcing
     #according to the original paper
-    def forward(self, Y, enc_out, mask = None):
+    def forward(self, Y, enc_out, dec_padding_mask = None, causal_mask = None, enc_padding_mask = None):
         
         Q = self.w_q_dec(Y)
         K = self.w_k_dec(Y)
         V = self.w_v_dec(Y)
         
-        self_attn_out = self.self_attn(Q, K, V, mask)
+        self_attn_mask = causal_mask
+        if dec_padding_mask is not None:
+            self_attn_mask = causal_mask + dec_padding_mask
+            
+        self_attn_out = self.self_attn(Q, K, V, self_attn_mask)
         
         sub_layer1_out = self.layer_norm1(Y + self.dropout_self_attn(self_attn_out))
         
-        Q_dec = self.w_q_dec_ca(self_attn_out)
+        Q_dec = self.w_q_dec_ca(sub_layer1_out)
         K_enc = self.w_k_enc(enc_out)
         V_enc = self.w_v_enc(enc_out)
         
-        cross_attn_out = self.cross_attn(Q_dec, K_enc, V_enc, mask)
+        cross_attn_out = self.cross_attn(Q_dec, K_enc, V_enc, enc_padding_mask)
         
         sub_layer2_out = self.layer_norm2(sub_layer1_out + self.dropout_cross_attn(cross_attn_out))
         
         ffl1_out = self.relu(self.ffl1(sub_layer2_out))
         ffn_out = self.ffl2(ffl1_out)
         
-        sub_layer3_out = self.layer_norm3(sub_layer2_out + ffn_out)
+        sub_layer3_out = self.layer_norm3(sub_layer2_out + self.dropout_ffn(ffn_out))
         
         return sub_layer3_out
 

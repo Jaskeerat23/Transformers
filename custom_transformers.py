@@ -5,6 +5,8 @@ from encoder import Encoder
 from decoder import Decoder
 from positional_encoding import PositionalEncoding
 
+from typing import Optional
+
 import math
 
 if __name__ == "__main__":
@@ -24,33 +26,53 @@ class TransformerNetwork(nn.Module):
                 tgt_seq_len : int,
                 src_vocab_size : int,
                 tgt_vocab_size : int,
-                device : str
+                decoder_only : bool = False,
+                device : str = 'cuda'
                 ):
         
         super().__init__()
+        if decoder_only:
+            assert tgt_vocab_size == src_vocab_size, 'Target Vocab not equal to Source Vocab for decoder only'
+        
+        #Hyper Parameters for Transformer
         self.n_x = n_x
         self.num_heads = num_heads
         self.d_model = d_model
         self.src_seq_len = src_seq_len
         self.tgt_seq_len = tgt_seq_len
         self.device = device
+        self.decoder_only = decoder_only
+        
+        #nn.Embedding will be used if we want to train the embeddings from scratch
+        #nn.Embedding.from_pretrained will be used if we provided an embedding matrix 
+        #constructed outside the class for source and target vocabulary (if source language != target language)
+        
+        #If we want to train embeddings from scratch then we can pass the embedding matrices as None
         
         if src_embedding_matrix is None:
-            self.src_emb_mat = nn.Embedding(num_embeddings = src_vocab_size, embedding_dim = d_model)
+            self.src_emb_mat = nn.Embedding(num_embeddings = src_vocab_size, embedding_dim = d_model, device = device)
         elif src_embedding_matrix is not None:
             self.src_emb_mat = nn.Embedding.from_pretrained(embeddings = src_embedding_matrix, freeze = False)
         
-        if tgt_embedding_matrix is None:
-            self.tgt_emb_mat = nn.Embedding(num_embeddings = tgt_vocab_size, embedding_dim = d_model)
-        elif tgt_embedding_matrix is not None:
-            self.tgt_emb_mat = nn.Embedding.from_pretrained(embeddings = tgt_embedding_matrix, freeze = False)
         
         self.src_positional_encoding = PositionalEncoding(seq_len = src_seq_len, d_model = d_model, device = device)
-        self.tgt_positional_encoding = PositionalEncoding(seq_len = tgt_seq_len, d_model = d_model, device = device)
         
-        self.encoder_stk = nn.ModuleList([
-            Encoder(num_heads = num_heads, d_model = d_model, d_ff = d_ff, device = device, post_norm = True) for i in range(n_x)
-        ])
+        #Since if model is decoder only we will not need different matrices
+        if not self.decoder_only:
+            
+            if tgt_embedding_matrix is None:
+                self.tgt_emb_mat = nn.Embedding(num_embeddings = tgt_vocab_size, embedding_dim = d_model, device = device)
+            
+            elif tgt_embedding_matrix is not None:
+                self.tgt_emb_mat = nn.Embedding.from_pretrained(embeddings = tgt_embedding_matrix, freeze = False).to(device)
+            
+            self.tgt_positional_encoding = PositionalEncoding(seq_len = tgt_seq_len, d_model = d_model, device = device)
+        
+        if not self.decoder_only:
+        
+            self.encoder_stk = nn.ModuleList([
+                Encoder(num_heads = num_heads, d_model = d_model, d_ff = d_ff, device = device, post_norm = True) for i in range(n_x)
+            ])
         
         self.decoder_stk = nn.ModuleList([
             Decoder(num_heads = num_heads, d_model = d_model, d_ff = d_ff, device = device, post_norm = True) for i in range(n_x)
@@ -58,46 +80,81 @@ class TransformerNetwork(nn.Module):
         
         self.linear = nn.Linear(in_features = d_model, out_features = tgt_vocab_size)
     
-    def forward(self, X : torch.Tensor, Y : torch.Tensor, pad_token : int):
+    
+    '''
+    The shape of masks are:
+        1.) Encoder Padding Mask = [B, 1, 1, seq_len]
+        2.) Decoder Padding Mask = [B, 1, 1, seq_len]
+        3.) Causal Mask = [1, 1, Seq_len(Target), Seq_len(Target)]
+    '''
+    
+    def forward(self, X : torch.Tensor, Y : Optional[torch.Tensor], pad_token : int):
+        
+        #Happens mostly when model is decoder only
+        if self.decoder_only:
+            Y = X
+        
+        #A safety measure
+        enc_padding_mask = dec_padding_mask = causal_mask = torch.tensor([1])
         
         pe_embs_x = self.src_positional_encoding(self.src_emb_mat(X))
-        pe_embs_y = self.tgt_positional_encoding(self.tgt_emb_mat(Y))
         
-        enc_padding_mask = (((X == pad_token).unsqueeze(dim = 1)).unsqueeze(dim = 1) * float('-inf')).to(device)
+        #if model is decoder only we don't actually need target embeddings 
+        #and encoder padding mask since encoder is not present
+        if not self.decoder_only:
+            pe_embs_y = self.tgt_positional_encoding(self.tgt_emb_mat(Y))
         
-        dec_padding_mask = ((Y == pad_token).unsqueeze(dim = 1)).unsqueeze(dim = 1) * float('-inf')
+            enc_padding_mask = (((X == pad_token).unsqueeze(dim = 1)).unsqueeze(dim = 1))
         
         L = Y.shape[1]
         
         causal_mask = torch.triu(
-            torch.full((L, L), float('-inf'), device=Y.device),
+            torch.ones((L, L), dtype=torch.bool, device=Y.device),
             diagonal=1
         ).unsqueeze(0).unsqueeze(0)
-
+        
+        dec_padding_mask = ((Y == pad_token).unsqueeze(dim = 1)).unsqueeze(dim = 1)
+        
+        if __name__ == "__main__":
+            print(f"The causal mask's first row is\n{torch.ones(size = (1, 1, 1, L)).to(device).masked_fill(causal_mask[0, 0, 1, :], float('-inf'))}")
         
         if __name__ == "__main__":
             print(f"Dimension of encoder padding mask is {enc_padding_mask.shape}")
             print(f"Dimension of decoder padding mask is {dec_padding_mask.shape}")
             print(f"Dimension of causal mask is {causal_mask.shape}")
         
-        enc_out = pe_embs_x
+        #Run through encoder
+        if not self.decoder_only:
+            enc_out = pe_embs_x
+            
+            for encoder in self.encoder_stk:
+                enc_out = encoder(enc_out, enc_padding_mask)
         
-        for encoder in self.encoder_stk:
-            enc_out = encoder(enc_out, enc_padding_mask)
+            dec_out = pe_embs_y
         
-        dec_out = pe_embs_y
+        else:
+            dec_out = pe_embs_x
         
+        #Run through Decoder
         for decoder in self.decoder_stk:
-            dec_out = decoder(dec_out, enc_out, dec_padding_mask, causal_mask, enc_padding_mask)
+            dec_out = decoder(
+                            dec_out,
+                            enc_out if not self.decoder_only else None,
+                            dec_padding_mask,
+                            causal_mask,
+                            enc_padding_mask if not self.decoder_only else None,
+                            not self.decoder_only
+                        )
         
+        #Final Linear Projection
         return self.linear(dec_out)
         
 if __name__ == "__main__":
     
     X = torch.randint(low = 0, high = 20, size = (32, 20)).to(device)
-    Y = torch.randint(low = 0, high = 30, size = (32, 30)).to(device)
+    Y = torch.randint(low = 0, high = 20, size = (32, 7)).to(device)
     emb_mat = torch.randn(size = (10000, 512)).to(device)
-    transformer = TransformerNetwork(None, None, 6, 8, 512, 2048, 20, 30, 10000, 1000, device).to(device)
+    transformer = TransformerNetwork(None, None, 6, 8, 512, 2048, 20, 20, 10000, 1000, False, device).to(device)
 
     ans = transformer(X, Y, 1)
     

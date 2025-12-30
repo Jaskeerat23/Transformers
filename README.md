@@ -9,7 +9,7 @@ This project focuses on **correct data flow, tensor shapes, masking logic, and t
 
 ---
 
-## 🔍 What This Project Covers
+## What This Project Covers
 
 - Full Transformer implementation **without using `nn.Transformer`**
 - Manual construction of:
@@ -25,7 +25,7 @@ This project focuses on **correct data flow, tensor shapes, masking logic, and t
 
 ---
 
-## 🧠 Architecture Overview
+## Architecture Overview
 
 ### Implemented Modules
 - **Embedding Layer**
@@ -45,7 +45,7 @@ This project focuses on **correct data flow, tensor shapes, masking logic, and t
 
 ---
 
-## 🔐 Masking Strategy
+## Masking Strategy
 
 - **Causal (Look-Ahead) Mask**
   - Prevents tokens from attending to future positions
@@ -55,7 +55,7 @@ Masking is applied directly to attention score matrices *before softmax*, follow
 
 ---
 
-## 📚 Dataset
+## Dataset
 
 - **Tiny Shakespeare**
 - Character-level tokenization
